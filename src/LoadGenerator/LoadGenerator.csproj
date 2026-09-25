@@ -5,4 +5,4 @@
   <ItemGroup>
     <ProjectReference Include="..\Shared\DevOpsLabs.Chaos\DevOpsLabs.Chaos.csproj" />
   </ItemGroup>
-</Project>\n
+</Project>

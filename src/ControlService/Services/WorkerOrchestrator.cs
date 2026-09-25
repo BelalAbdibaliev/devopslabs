@@ -19,7 +19,7 @@ public class WorkerOrchestrator
             try {
                 var res = await client.GetFromJsonAsync<List<JobDto>>($"{w}/api/jobs", ct);
                 if (res != null) jobs.AddRange(res);
-            } catch { /* offline */ }
+            } catch { }
         }
         return jobs;
     }
@@ -58,12 +58,19 @@ public class WorkerOrchestrator
         return false;
     }
 
+    public async Task SyncChaosToServiceAsync(string serviceUrl, ChaosScenario scenario, CancellationToken ct)
+    {
+        var client = _clientFactory.CreateClient();
+        try { await client.PostAsJsonAsync($"{serviceUrl}/api/chaos/sync", scenario, ct); } catch { }
+    }
+
     public async Task EmergencyStopAsync(CancellationToken ct)
     {
         var client = _clientFactory.CreateClient();
-        foreach (var w in _workers)
-        {
-            try { await client.PostAsync($"{w}/api/emergency-stop", null, ct); } catch { }
-        }
+        foreach (var w in _workers) { try { await client.PostAsync($"{w}/api/emergency-stop", null, ct); } catch { } }
+        
+        // Also clear business services chaos state
+        var biz = new[] { "http://localhost:5002", "http://localhost:5003", "http://localhost:5004" };
+        foreach (var b in biz) { try { await client.PostAsync($"{b}/api/chaos/clear", null, ct); } catch { } }
     }
 }
