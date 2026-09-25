@@ -1,0 +1,29 @@
+{
+  "title": "System Overview",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests (RPS)",
+      "targets": [{"expr": "rate(http_server_request_duration_seconds_count[1m])", "legendFormat": "{{service.name}}"}],
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Duration (P95)",
+      "targets": [{"expr": "histogram_quantile(0.95, rate(http_server_request_duration_seconds_bucket[1m]))", "legendFormat": "{{service.name}}"}],
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Active Chaos Scenarios",
+      "targets": [{"expr": "devops_lab_active_scenarios", "legendFormat": "Scenarios"}],
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Process CPU Usage",
+      "targets": [{"expr": "process_cpu_time_seconds_total", "legendFormat": "{{service.name}}"}],
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+    }
+  ]
+}

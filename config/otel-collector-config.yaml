@@ -6,28 +6,32 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
-processors:
-  batch:
-
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
     namespace: devops_lab
-    
-  logging:
-    verbosity: detailed
+    send_timestamps: true
+  loki:
+    endpoint: "http://loki:3100/loki/api/v1/push"
+  otlp/tempo:
+    endpoint: "tempo:4317"
+    tls:
+      insecure: true
+
+processors:
+  batch:
 
 service:
   pipelines:
-    metrics:
-      receivers: [otlp]
-      processors: [batch]
-      exporters: [prometheus, logging]
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging] # Can be expanded to Jaeger/Tempo later
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
     logs:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging] # Can be expanded to Loki later
+      exporters: [loki]

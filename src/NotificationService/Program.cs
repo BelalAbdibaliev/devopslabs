@@ -1,7 +1,26 @@
-using NotificationService;
+using DevOpsLabs.Chaos.Observability;
+using DevOpsLabs.Chaos.Extensions;
+using NotificationService.Services;
 
-var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
+var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddDevOpsLabsLogging("NotificationService");
+builder.Services.AddDevOpsLabsTelemetry("NotificationService");
 
-var host = builder.Build();
-host.Run();
+builder.Services.AddProblemDetails();
+builder.Services.AddChaosEngine();
+
+builder.Services.AddHostedService<RabbitMqConsumer>();
+
+var rmqStr = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://guest:guest@localhost:5672";
+builder.Services.AddHealthChecks();
+    // RabbitMQ HealthCheck requires custom async factory in v9;
+
+var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseChaosEngine();
+app.MapHealthChecks("/health");
+app.MapChaosSyncEndpoints();
+
+app.Run();

@@ -1,0 +1,33 @@
+
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.keda $svc.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ $name }}-scaledobject
+spec:
+  scaleTargetRef:
+    name: {{ $name }}
+  minReplicaCount: {{ $svc.keda.minReplicaCount }}
+  maxReplicaCount: {{ $svc.keda.maxReplicaCount }}
+  triggers:
+  - type: rabbitmq
+    metadata:
+      queueName: notifications-queue
+      mode: QueueLength
+      value: {{ $svc.keda.queueLength | quote }}
+    authenticationRef:
+      name: rabbitmq-trigger-auth
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rabbitmq-trigger-auth
+spec:
+  secretTargetRef:
+  - parameter: host
+    name: rabbitmq-secret
+    key: host
+{{- end }}
+{{- end }}

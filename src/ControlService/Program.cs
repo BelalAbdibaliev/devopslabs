@@ -1,9 +1,13 @@
+using DevOpsLabs.Chaos.Observability;
 using ControlService.Handlers;
 using ControlService.Services;
 using DevOpsLabs.Chaos.Models;
 using DevOpsLabs.Chaos.State;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddDevOpsLabsLogging("ControlService");
+builder.Services.AddDevOpsLabsTelemetry("ControlService");
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -16,6 +20,9 @@ builder.Services.AddSingleton<WorkerOrchestrator>();
 builder.Services.AddSingleton<IncidentManager>();
 
 var app = builder.Build();
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.UseDevOpsLabsMetrics();
 
 app.UseExceptionHandler();
 app.MapHealthChecks("/health");
@@ -80,5 +87,40 @@ api.MapPost("/incidents/start", async (System.Text.Json.JsonElement payload, Inc
 
 api.MapGet("/incidents", (IncidentManager im) => Results.Ok(im.GetActiveIncidents()));
 api.MapPost("/incidents/{id}/stop", async (string id, IncidentManager im, CancellationToken ct) => { await im.StopIncidentAsync(id, ct); return Results.Ok(); });
+
+
+// -- Infrastructure Chaos Endpoints --
+api.MapPost("/db/stress", async (DbStressConfig config, WorkerOrchestrator wo, CancellationToken ct) => 
+{
+    var client = new HttpClient();
+    // Assuming OrderService for Insert, ProductService for Select load
+    var target = config.Type == "Insert" ? "http://localhost:5002" : "http://localhost:5003";
+    var res = await client.PostAsJsonAsync($"{target}/api/db/stress", config, ct);
+    return res.IsSuccessStatusCode ? Results.Accepted() : Results.StatusCode(500);
+});
+
+api.MapPost("/queue/load", async (QueueLoadConfig config, CancellationToken ct) => 
+{
+    var client = new HttpClient();
+    var res = await client.PostAsJsonAsync("http://localhost:5002/api/queue/load", config, ct);
+    return res.IsSuccessStatusCode ? Results.Accepted() : Results.StatusCode(500);
+});
+
+api.MapPost("/queue/consumer", async (QueueConsumerConfig config, IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
+{
+    var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.DependencyFailure, "Consumer", System.Text.Json.JsonSerializer.SerializeToElement(config), DateTimeOffset.UtcNow, null);
+    await sm.AddScenarioAsync(scenario, ct);
+    await wo.SyncChaosToServiceAsync("http://localhost:5008", scenario, ct); // NotificationService runs on 5008 typically, but let's sync to all
+    return Results.Ok(scenario);
+});
+
+api.MapPost("/redis/outage", async (System.Text.Json.JsonElement payload, IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
+{
+    var durationSeconds = payload.GetProperty("durationSeconds").GetInt32();
+    var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.DependencyFailure, "Redis", null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(durationSeconds));
+    await sm.AddScenarioAsync(scenario, ct);
+    await wo.SyncChaosToServiceAsync("http://localhost:5003", scenario, ct); // ProductService uses Redis
+    return Results.Ok(scenario);
+});
 
 app.Run();
