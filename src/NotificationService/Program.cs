@@ -16,7 +16,9 @@ var rmqStr = builder.Configuration.GetConnectionString("RabbitMQ") ?? "amqp://gu
 builder.Services.AddHealthChecks();
     // RabbitMQ HealthCheck requires custom async factory in v9;
 
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 
 app.UseExceptionHandler();
 app.UseChaosEngine();

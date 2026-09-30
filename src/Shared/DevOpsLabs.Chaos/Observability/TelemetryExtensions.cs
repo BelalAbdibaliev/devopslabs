@@ -58,9 +58,10 @@ public static class TelemetryExtensions
     public static ILoggingBuilder AddDevOpsLabsLogging(this ILoggingBuilder builder, string serviceName)
     {
         var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
-        builder.AddJsonConsole(options => {
+        builder.AddSimpleConsole(options => {
             options.IncludeScopes = true;
-            options.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff ";
+            options.SingleLine = true;
+            options.TimestampFormat = "[HH:mm:ss] ";
         });
         builder.AddOpenTelemetry(options => {
             options.IncludeFormattedMessage = true;

@@ -19,7 +19,9 @@ builder.Services.AddSingleton<IScenarioManager, ScenarioManager>();
 builder.Services.AddSingleton<WorkerOrchestrator>();
 builder.Services.AddSingleton<IncidentManager>();
 
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseDevOpsLabsMetrics();
@@ -34,12 +36,12 @@ api.MapGet("/scenarios", async (IScenarioManager sm, CancellationToken ct) => Re
 api.MapPost("/scenarios", async (ChaosScenario scenario, IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
 {
     var created = await sm.AddScenarioAsync(scenario, ct);
-    string url = created.TargetService switch { "OrderService" => "http://localhost:5002", "ProductService" => "http://localhost:5003", "DependencyService" => "http://localhost:5004", _ => "" };
+    string url = created.TargetService switch { "OrderService" => "http://orderservice:8080", "ProductService" => "http://productservice:8080", "DependencyService" => "http://dependencyservice:8080", _ => "" };
     if(url != "") await wo.SyncChaosToServiceAsync(url, created, ct);
     return Results.Created($"/api/control/scenarios/{created.Id}", created);
 });
 api.MapDelete("/scenarios/{id}", async (string id, IScenarioManager sm, CancellationToken ct) => await sm.RemoveScenarioAsync(id, ct) ? Results.NoContent() : Results.NotFound());
-api.MapPost("/reset", async (IScenarioManager sm, CancellationToken ct) => { await sm.ResetAsync(ct); return Results.Ok(new { Message = "Reset" }); });
+api.MapMethods("/reset", new[] { "POST", "GET", "PUT", "DELETE" }, async (IScenarioManager sm, CancellationToken ct) => { await sm.ResetAsync(ct); return Results.Ok(new { Message = "Reset" }); });
 api.MapGet("/jobs", async (WorkerOrchestrator wo, CancellationToken ct) => Results.Ok(await wo.GetActiveJobsAsync(ct)));
 api.MapDelete("/jobs/{id}", async (string id, WorkerOrchestrator wo, CancellationToken ct) => await wo.StopJobAsync(id, ct) ? Results.NoContent() : Results.NotFound());
 
@@ -52,7 +54,7 @@ api.MapPost("/memory", async (MemoryStressConfig config, WorkerOrchestrator wo, 
 api.MapPost("/load", async (LoadGeneratorConfig config, WorkerOrchestrator wo, CancellationToken ct) => 
 { var job = await wo.StartLoadAsync(config, ct); return job != null ? Results.Created($"/api/control/jobs/{job.Id}", job) : Results.StatusCode(500); });
 
-api.MapPost("/emergency-stop", async (IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
+api.MapMethods("/emergency-stop", new[] { "POST", "GET" }, async (IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
 { await sm.EmergencyStopAsync(ct); await wo.EmergencyStopAsync(ct); return Results.Ok(new { Message = "Emergency stop executed" }); });
 
 api.MapPost("/latency", async (System.Text.Json.JsonElement payload, IScenarioManager sm, WorkerOrchestrator wo, CancellationToken ct) => 
@@ -61,7 +63,7 @@ api.MapPost("/latency", async (System.Text.Json.JsonElement payload, IScenarioMa
     var config = System.Text.Json.JsonSerializer.Deserialize<LatencyConfig>(payload.GetRawText(), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.Latency, target, System.Text.Json.JsonSerializer.SerializeToElement(config), DateTimeOffset.UtcNow, null);
     await sm.AddScenarioAsync(scenario, ct);
-    string url = target switch { "OrderService" => "http://localhost:5002", "ProductService" => "http://localhost:5003", "DependencyService" => "http://localhost:5004", _ => "" };
+    string url = target switch { "OrderService" => "http://orderservice:8080", "ProductService" => "http://productservice:8080", "DependencyService" => "http://dependencyservice:8080", _ => "" };
     if(url != "") await wo.SyncChaosToServiceAsync(url, scenario, ct);
     return Results.Ok(scenario);
 });
@@ -72,7 +74,7 @@ api.MapPost("/errors", async (System.Text.Json.JsonElement payload, IScenarioMan
     var config = System.Text.Json.JsonSerializer.Deserialize<ErrorConfig>(payload.GetRawText(), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.ErrorInjection, target, System.Text.Json.JsonSerializer.SerializeToElement(config), DateTimeOffset.UtcNow, null);
     await sm.AddScenarioAsync(scenario, ct);
-    string url = target switch { "OrderService" => "http://localhost:5002", "ProductService" => "http://localhost:5003", "DependencyService" => "http://localhost:5004", _ => "" };
+    string url = target switch { "OrderService" => "http://orderservice:8080", "ProductService" => "http://productservice:8080", "DependencyService" => "http://dependencyservice:8080", _ => "" };
     if(url != "") await wo.SyncChaosToServiceAsync(url, scenario, ct);
     return Results.Ok(scenario);
 });
@@ -82,6 +84,8 @@ api.MapPost("/incidents/start", async (System.Text.Json.JsonElement payload, Inc
     var type = payload.GetProperty("type").GetString();
     var duration = payload.GetProperty("durationSeconds").GetInt32();
     if (type == "cascading-failure") return Results.Ok(await im.StartCascadingFailureAsync(duration, ct));
+    if (type == "error-storm") return Results.Ok(await im.StartErrorStormAsync(duration, ct));
+    if (type == "combined-outage") return Results.Ok(await im.StartCombinedOutageAsync(duration, ct));
     return Results.BadRequest();
 });
 
@@ -94,7 +98,7 @@ api.MapPost("/db/stress", async (DbStressConfig config, WorkerOrchestrator wo, C
 {
     var client = new HttpClient();
     // Assuming OrderService for Insert, ProductService for Select load
-    var target = config.Type == "Insert" ? "http://localhost:5002" : "http://localhost:5003";
+    var target = config.Type == "Insert" ? "http://orderservice:8080" : "http://productservice:8080";
     var res = await client.PostAsJsonAsync($"{target}/api/db/stress", config, ct);
     return res.IsSuccessStatusCode ? Results.Accepted() : Results.StatusCode(500);
 });
@@ -102,7 +106,7 @@ api.MapPost("/db/stress", async (DbStressConfig config, WorkerOrchestrator wo, C
 api.MapPost("/queue/load", async (QueueLoadConfig config, CancellationToken ct) => 
 {
     var client = new HttpClient();
-    var res = await client.PostAsJsonAsync("http://localhost:5002/api/queue/load", config, ct);
+    var res = await client.PostAsJsonAsync("http://orderservice:8080/api/queue/load", config, ct);
     return res.IsSuccessStatusCode ? Results.Accepted() : Results.StatusCode(500);
 });
 
@@ -110,7 +114,7 @@ api.MapPost("/queue/consumer", async (QueueConsumerConfig config, IScenarioManag
 {
     var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.DependencyFailure, "Consumer", System.Text.Json.JsonSerializer.SerializeToElement(config), DateTimeOffset.UtcNow, null);
     await sm.AddScenarioAsync(scenario, ct);
-    await wo.SyncChaosToServiceAsync("http://localhost:5008", scenario, ct); // NotificationService runs on 5008 typically, but let's sync to all
+    await wo.SyncChaosToServiceAsync("http://notificationservice:8080", scenario, ct); // NotificationService runs on 5008 typically, but let's sync to all
     return Results.Ok(scenario);
 });
 
@@ -119,7 +123,7 @@ api.MapPost("/redis/outage", async (System.Text.Json.JsonElement payload, IScena
     var durationSeconds = payload.GetProperty("durationSeconds").GetInt32();
     var scenario = new ChaosScenario(Guid.NewGuid().ToString(), ScenarioType.DependencyFailure, "Redis", null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(durationSeconds));
     await sm.AddScenarioAsync(scenario, ct);
-    await wo.SyncChaosToServiceAsync("http://localhost:5003", scenario, ct); // ProductService uses Redis
+    await wo.SyncChaosToServiceAsync("http://productservice:8080", scenario, ct); // ProductService uses Redis
     return Results.Ok(scenario);
 });
 

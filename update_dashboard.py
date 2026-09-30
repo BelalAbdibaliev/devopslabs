@@ -1,4 +1,6 @@
+import os
 
+html_content = """
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
@@ -200,12 +202,11 @@
         addLog(`POST ${url}`, 'detail');
         
         try {
-            const req = { method: 'POST' };
-            if (Object.keys(body).length > 0) {
-                req.headers = { 'Content-Type': 'application/json' };
-                req.body = JSON.stringify(body);
-            }
-            const res = await fetch(url, req);
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
             
             if (res.ok) {
                 addLog(`Command accepted by orchestration engine (HTTP ${res.status})`, 'success');
@@ -257,3 +258,8 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+"""
+
+with open("src/ControlService/wwwroot/index.html", "w") as f:
+    f.write(html_content)
+

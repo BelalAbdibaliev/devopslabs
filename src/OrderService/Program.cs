@@ -35,7 +35,9 @@ builder.Services.AddHealthChecks()
     .AddNpgSql(connStr);
     // RabbitMQ HealthCheck requires custom async factory in v9;
 
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 app.UseDevOpsLabsMetrics();
 
 using (var scope = app.Services.CreateScope())

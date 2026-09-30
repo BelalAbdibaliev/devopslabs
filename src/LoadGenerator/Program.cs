@@ -4,7 +4,9 @@ using DevOpsLabs.Chaos.Models;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<LoadEngine>();
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 
 app.MapGet("/api/jobs", (LoadEngine engine) => Results.Ok(engine.GetJobs()));
 app.MapPost("/api/jobs", (LoadGeneratorConfig config, LoadEngine engine) => Results.Ok(engine.StartJob(config)));

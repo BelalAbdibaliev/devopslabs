@@ -36,17 +36,53 @@ public class IncidentManager
             DateTimeOffset.UtcNow.AddSeconds(durationSeconds)
         );
         await _scenarioManager.AddScenarioAsync(latencyScenario, ct);
-        await _workerOrchestrator.SyncChaosToServiceAsync("http://localhost:5003", latencyScenario, ct);
+        await _workerOrchestrator.SyncChaosToServiceAsync("http://productservice:8080", latencyScenario, ct);
 
         // Step 2: Generate intense load to Order Service
         var loadConfig = new LoadGeneratorConfig(
-            "http://localhost:5000/api/orders", 
+            "http://gateway:8080/api/orders", 
             RequestsPerSecond: 200, 
             DurationSeconds: durationSeconds, 
             Concurrency: 500
         );
         await _workerOrchestrator.StartLoadAsync(loadConfig, ct);
 
+        return incident;
+    }
+
+
+    public async Task<Incident> StartErrorStormAsync(int durationSeconds, CancellationToken ct)
+    {
+        var id = Guid.NewGuid().ToString();
+        var incident = new Incident(id, "ErrorStorm", DateTimeOffset.UtcNow);
+        _activeIncidents[id] = incident;
+
+        var errScenario = new ChaosScenario($"incident-{id}-err", ScenarioType.ErrorInjection, "OrderService", 
+            JsonSerializer.SerializeToElement(new ErrorConfig(500, 0.4)), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(durationSeconds));
+        
+        await _scenarioManager.AddScenarioAsync(errScenario, ct);
+        await _workerOrchestrator.SyncChaosToServiceAsync("http://orderservice:8080", errScenario, ct);
+        return incident;
+    }
+
+    public async Task<Incident> StartCombinedOutageAsync(int durationSeconds, CancellationToken ct)
+    {
+        var id = Guid.NewGuid().ToString();
+        var incident = new Incident(id, "CombinedOutage", DateTimeOffset.UtcNow);
+        _activeIncidents[id] = incident;
+
+        // Redis outage + Latency
+        var redisScenario = new ChaosScenario($"incident-{id}-redis", ScenarioType.DependencyFailure, "ProductService", 
+            null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(durationSeconds));
+        
+        var latencyScenario = new ChaosScenario($"incident-{id}-lat", ScenarioType.Latency, "OrderService", 
+            JsonSerializer.SerializeToElement(new LatencyConfig(3000, 0, 0, 1.0)), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddSeconds(durationSeconds));
+            
+        await _scenarioManager.AddScenarioAsync(redisScenario, ct);
+        await _workerOrchestrator.SyncChaosToServiceAsync("http://productservice:8080", redisScenario, ct);
+
+        await _scenarioManager.AddScenarioAsync(latencyScenario, ct);
+        await _workerOrchestrator.SyncChaosToServiceAsync("http://orderservice:8080", latencyScenario, ct);
         return incident;
     }
 
@@ -57,8 +93,8 @@ public class IncidentManager
             await _scenarioManager.RemoveScenarioAsync($"incident-{id}-latency", ct);
             
             var client = new HttpClient();
-            await client.PostAsync("http://localhost:5007/api/emergency-stop", null, ct);
-            await client.PostAsync("http://localhost:5003/api/chaos/clear", null, ct);
+            await client.PostAsync("http://loadgenerator:8080/api/emergency-stop", null, ct);
+            await client.PostAsync("http://productservice:8080/api/chaos/clear", null, ct);
         }
     }
 }

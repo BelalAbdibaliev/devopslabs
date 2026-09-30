@@ -38,7 +38,9 @@ builder.Services.AddHealthChecks()
     .AddNpgSql(connStr)
     .AddRedis(redisConn);
 
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 app.UseDevOpsLabsMetrics();
 
 // Seed Database

@@ -9,7 +9,9 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
 builder.Services.AddChaosEngine();
 
+builder.Services.AddHttpLogging(o => { });
 var app = builder.Build();
+app.UseHttpLogging();
 app.UseDevOpsLabsMetrics();
 
 app.UseExceptionHandler();

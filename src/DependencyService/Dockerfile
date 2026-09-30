@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
+COPY Directory.Build.props .
 COPY ["src/DependencyService/DependencyService.csproj", "src/DependencyService/"]
 COPY ["src/Shared/DevOpsLabs.Chaos/DevOpsLabs.Chaos.csproj", "src/Shared/DevOpsLabs.Chaos/"]
 RUN dotnet restore "src/DependencyService/DependencyService.csproj"
@@ -11,9 +12,8 @@ RUN dotnet publish "DependencyService.csproj" -c Release -o /app/publish /p:UseA
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080
-# Non-root user for security
-RUN adduser -u 1000 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
+# Use built-in non-root user provided by modern .NET images
+USER app
 ENV ASPNETCORE_URLS=http://+:8080
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "DependencyService.dll"]

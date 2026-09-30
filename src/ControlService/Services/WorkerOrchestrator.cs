@@ -5,7 +5,7 @@ namespace ControlService.Services;
 public class WorkerOrchestrator
 {
     private readonly IHttpClientFactory _clientFactory;
-    private readonly string[] _workers = new[] { "http://localhost:5005", "http://localhost:5006", "http://localhost:5007" };
+    private readonly string[] _workers = new[] { "http://cpuworker:8080", "http://memoryworker:8080", "http://loadgenerator:8080" };
 
     public WorkerOrchestrator(IHttpClientFactory clientFactory) => _clientFactory = clientFactory;
 
@@ -27,21 +27,21 @@ public class WorkerOrchestrator
     public async Task<JobDto?> StartCpuStressAsync(CpuStressConfig config, CancellationToken ct)
     {
         var client = _clientFactory.CreateClient();
-        var res = await client.PostAsJsonAsync("http://localhost:5005/api/jobs", config, ct);
+        var res = await client.PostAsJsonAsync("http://cpuworker:8080/api/jobs", config, ct);
         return await res.Content.ReadFromJsonAsync<JobDto>(cancellationToken: ct);
     }
 
     public async Task<JobDto?> StartMemoryStressAsync(MemoryStressConfig config, CancellationToken ct)
     {
         var client = _clientFactory.CreateClient();
-        var res = await client.PostAsJsonAsync("http://localhost:5006/api/jobs", config, ct);
+        var res = await client.PostAsJsonAsync("http://memoryworker:8080/api/jobs", config, ct);
         return await res.Content.ReadFromJsonAsync<JobDto>(cancellationToken: ct);
     }
 
     public async Task<JobDto?> StartLoadAsync(LoadGeneratorConfig config, CancellationToken ct)
     {
         var client = _clientFactory.CreateClient();
-        var res = await client.PostAsJsonAsync("http://localhost:5007/api/jobs", config, ct);
+        var res = await client.PostAsJsonAsync("http://loadgenerator:8080/api/jobs", config, ct);
         return await res.Content.ReadFromJsonAsync<JobDto>(cancellationToken: ct);
     }
 
@@ -70,7 +70,7 @@ public class WorkerOrchestrator
         foreach (var w in _workers) { try { await client.PostAsync($"{w}/api/emergency-stop", null, ct); } catch { } }
         
         // Also clear business services chaos state
-        var biz = new[] { "http://localhost:5002", "http://localhost:5003", "http://localhost:5004" };
+        var biz = new[] { "http://orderservice:8080", "http://productservice:8080", "http://dependencyservice:8080" };
         foreach (var b in biz) { try { await client.PostAsync($"{b}/api/chaos/clear", null, ct); } catch { } }
     }
 }
