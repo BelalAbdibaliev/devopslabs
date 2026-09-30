@@ -233,7 +233,7 @@
     
     function startDb() { 
         const qps = +document.getElementById('dbQps').value;
-        postAction('/api/control/db/stress', { queriesPerSecond: qps, type: 'Select', durationSeconds: 120 }, 'DB Stress', `Sending ${qps} Queries/sec`); 
+        postAction('/api/control/db/stress', { queriesPerSecond: qps, concurrency: 50, type: 'Select', durationSeconds: 120 }, 'DB Stress', `Sending ${qps} Queries/sec`); 
     }
     
     function startQueueLoad() { 

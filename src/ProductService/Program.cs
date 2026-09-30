@@ -89,13 +89,13 @@ app.MapGet("/api/products/{id}", async (int id, ProductDbContext db, IDistribute
 
     try {
         await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(product), new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5) });
-    } catch { } // Ignore cache write failures during outage
+    } catch (Exception ex) { Console.WriteLine(ex.ToString()); } // Ignore cache write failures during outage
 
     return Results.Ok(product);
 });
 
 // DB Stress Endpoint
-app.MapPost("/api/db/stress", (DbStressConfig config, IServiceProvider sp) => 
+app.MapPost("/api/db/stress", (DbStressConfig config) => 
 {
     _ = Task.Run(async () => 
     {
@@ -109,7 +109,7 @@ app.MapPost("/api/db/stress", (DbStressConfig config, IServiceProvider sp) =>
             _ = Task.Run(async () => 
             {
                 try {
-                    using var scope = sp.CreateScope();
+                    using var scope = app.Services.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
                     if (config.Type == "Select") {
                         await db.Products.AsNoTracking().Where(p => p.Category == "Electronics").ToListAsync(cts.Token);
@@ -120,7 +120,7 @@ app.MapPost("/api/db/stress", (DbStressConfig config, IServiceProvider sp) =>
                         var p = await db.Products.FirstOrDefaultAsync(cts.Token);
                         if (p != null) { p.Stock++; await db.SaveChangesAsync(cts.Token); }
                     }
-                } catch { } 
+                } catch (Exception ex) { Console.WriteLine(ex.ToString()); } 
                 finally { sem.Release(); }
             });
         }

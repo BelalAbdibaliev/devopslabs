@@ -80,7 +80,7 @@ app.MapPost("/api/queue/load", (QueueLoadConfig config, RabbitMqPublisher rmq) =
 });
 
 // DB Stress Endpoint
-app.MapPost("/api/db/stress", (DbStressConfig config, IServiceProvider sp) => 
+app.MapPost("/api/db/stress", (DbStressConfig config) => 
 {
     _ = Task.Run(async () => 
     {
@@ -94,7 +94,7 @@ app.MapPost("/api/db/stress", (DbStressConfig config, IServiceProvider sp) =>
             _ = Task.Run(async () => 
             {
                 try {
-                    using var scope = sp.CreateScope();
+                    using var scope = app.Services.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
                     if (config.Type == "Insert") {
                         db.Orders.Add(new Order { CustomerId = 999, TotalAmount = 99.99M });
